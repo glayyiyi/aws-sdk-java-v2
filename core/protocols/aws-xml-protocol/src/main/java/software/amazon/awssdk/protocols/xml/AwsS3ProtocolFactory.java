@@ -16,8 +16,17 @@
 package software.amazon.awssdk.protocols.xml;
 
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import software.amazon.awssdk.annotations.SdkProtectedApi;
+import software.amazon.awssdk.awscore.AwsResponse;
+import software.amazon.awssdk.core.Response;
+import software.amazon.awssdk.core.SdkPojo;
+import software.amazon.awssdk.core.http.HttpResponseHandler;
 import software.amazon.awssdk.protocols.query.unmarshall.XmlElement;
+import software.amazon.awssdk.protocols.xml.internal.unmarshall.AwsXmlPredicatedResponseHandler;
+import software.amazon.awssdk.protocols.xml.internal.unmarshall.AwsXmlUnmarshallingContext;
 
 /**
  * Factory to generate the various protocol handlers and generators to be used for communicating with
@@ -25,6 +34,7 @@ import software.amazon.awssdk.protocols.query.unmarshall.XmlElement;
  */
 @SdkProtectedApi
 public final class AwsS3ProtocolFactory extends AwsXmlProtocolFactory {
+    private static final String ERROR_IN_SUCCESS_BODY_ELEMENT_NAME = "Error";
 
     private AwsS3ProtocolFactory(Builder builder) {
         super(builder);
@@ -39,6 +49,12 @@ public final class AwsS3ProtocolFactory extends AwsXmlProtocolFactory {
     @Override
     Optional<XmlElement> getErrorRoot(XmlElement document) {
         return Optional.of(document);
+    }
+
+    private Optional<XmlElement> getErrorRootFromSuccessBody(XmlElement document) {
+        return ERROR_IN_SUCCESS_BODY_ELEMENT_NAME.equals(document.elementName())
+            ? Optional.of(document)
+            : Optional.empty();
     }
 
     public static Builder builder() {
@@ -56,5 +72,49 @@ public final class AwsS3ProtocolFactory extends AwsXmlProtocolFactory {
         public AwsS3ProtocolFactory build() {
             return new AwsS3ProtocolFactory(this);
         }
+    }
+
+    @Override
+    public <T extends AwsResponse> HttpResponseHandler<Response<T>> createCombinedResponseHandler(
+        Supplier<SdkPojo> pojoSupplier, XmlOperationMetadata staxOperationMetadata) {
+
+        return createErrorCouldBeInBodyResponseHandler(pojoSupplier, staxOperationMetadata);
+    }
+
+    private <T extends AwsResponse> HttpResponseHandler<Response<T>> createErrorCouldBeInBodyResponseHandler(
+        Supplier<SdkPojo> pojoSupplier, XmlOperationMetadata staxOperationMetadata) {
+
+        return new AwsXmlPredicatedResponseHandler<>(r -> pojoSupplier.get(),
+                                                     createResponseTransformer(pojoSupplier),
+                                                     createErrorTransformer(),
+                                                     findErrorInS3Response(),
+                                                     staxOperationMetadata.isHasStreamingSuccessResponse());
+    }
+
+    private Function<AwsXmlUnmarshallingContext, AwsXmlUnmarshallingContext> findErrorInS3Response() {
+        return context -> {
+            Optional<XmlElement> parsedRootXml = Optional.ofNullable(context.parsedRootXml());
+
+            if (!context.sdkHttpFullResponse().isSuccessful()) {
+                // Request was non-2xx, error is expected to be in root
+                Optional<XmlElement> parsedErrorXml = parsedRootXml.flatMap(this::getErrorRoot);
+                return context.toBuilder().responseIsSuccess(false).parsedErrorXml(parsedErrorXml.orElse(null)).build();
+            }
+
+            // Check body to see if an error turned up there
+            Optional<XmlElement> parsedErrorXml = parsedRootXml.isPresent() ?
+                getErrorRootFromSuccessBody(context.parsedRootXml()) : Optional.empty();
+
+            // Request had an HTTP success code, but an error was found in the body
+            return parsedErrorXml.map(xmlElement -> context.toBuilder()
+                                                           .responseIsSuccess(false)
+                                                           .parsedErrorXml(xmlElement)
+                                                           .build())
+                                 // Otherwise the response can be considered successful
+                                 .orElseGet(() -> context.toBuilder()
+                                                         .responseIsSuccess(true)
+                                                         .build());
+
+        };
     }
 }

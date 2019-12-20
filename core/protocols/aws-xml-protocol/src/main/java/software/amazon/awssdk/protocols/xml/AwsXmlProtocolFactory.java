@@ -20,14 +20,18 @@ import static java.util.Collections.unmodifiableList;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
+
 import software.amazon.awssdk.annotations.SdkProtectedApi;
 import software.amazon.awssdk.awscore.AwsResponse;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.Response;
 import software.amazon.awssdk.core.SdkPojo;
 import software.amazon.awssdk.core.client.config.SdkClientConfiguration;
 import software.amazon.awssdk.core.client.config.SdkClientOption;
 import software.amazon.awssdk.core.http.HttpResponseHandler;
+import software.amazon.awssdk.core.internal.http.CombinedResponseHandler;
 import software.amazon.awssdk.http.SdkHttpFullRequest;
 import software.amazon.awssdk.protocols.core.ExceptionMetadata;
 import software.amazon.awssdk.protocols.core.OperationInfo;
@@ -37,7 +41,10 @@ import software.amazon.awssdk.protocols.query.unmarshall.AwsXmlErrorProtocolUnma
 import software.amazon.awssdk.protocols.query.unmarshall.XmlElement;
 import software.amazon.awssdk.protocols.xml.internal.marshall.XmlGenerator;
 import software.amazon.awssdk.protocols.xml.internal.marshall.XmlProtocolMarshaller;
+import software.amazon.awssdk.protocols.xml.internal.unmarshall.AwsXmlErrorTransformer;
 import software.amazon.awssdk.protocols.xml.internal.unmarshall.AwsXmlResponseHandler;
+import software.amazon.awssdk.protocols.xml.internal.unmarshall.AwsXmlResponseTransformer;
+import software.amazon.awssdk.protocols.xml.internal.unmarshall.AwsXmlUnmarshallingContext;
 import software.amazon.awssdk.protocols.xml.internal.unmarshall.XmlProtocolUnmarshaller;
 
 /**
@@ -81,7 +88,7 @@ public class AwsXmlProtocolFactory {
     }
 
     /**
-     * Creates an instance of {@link XmlProtocolMarshaller} to be used for marshalling the requess.
+     * Creates an instance of {@link XmlProtocolMarshaller} to be used for marshalling the request.
      *
      * @param operationInfo Info required to marshall the request
      */
@@ -100,8 +107,30 @@ public class AwsXmlProtocolFactory {
             staxOperationMetadata.isHasStreamingSuccessResponse());
     }
 
+    protected <T extends AwsResponse> Function<AwsXmlUnmarshallingContext, T> createResponseTransformer(
+        Supplier<SdkPojo> pojoSupplier) {
+
+        return new AwsXmlResponseTransformer<>(
+            XmlProtocolUnmarshaller.builder().build(), r -> pojoSupplier.get());
+    }
+
+    protected Function<AwsXmlUnmarshallingContext, AwsServiceException> createErrorTransformer() {
+        return AwsXmlErrorTransformer.builder()
+                                     .defaultExceptionSupplier(defaultServiceExceptionSupplier)
+                                     .exceptions(modeledExceptions)
+                                     .errorUnmarshaller(XmlProtocolUnmarshaller.builder().build())
+                                     .build();
+    }
+
     public HttpResponseHandler<AwsServiceException> createErrorResponseHandler() {
         return errorUnmarshaller;
+    }
+
+    public <T extends AwsResponse> HttpResponseHandler<Response<T>> createCombinedResponseHandler(
+        Supplier<SdkPojo> pojoSupplier, XmlOperationMetadata staxOperationMetadata) {
+
+        return new CombinedResponseHandler<>(createResponseHandler(pojoSupplier, staxOperationMetadata),
+                                             createErrorResponseHandler());
     }
 
     /**

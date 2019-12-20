@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import software.amazon.awssdk.annotations.SdkInternalApi;
 import software.amazon.awssdk.core.SdkField;
 import software.amazon.awssdk.core.SdkPojo;
@@ -32,7 +33,6 @@ import software.amazon.awssdk.core.traits.TimestampFormatTrait;
 import software.amazon.awssdk.http.SdkHttpFullResponse;
 import software.amazon.awssdk.protocols.core.StringToInstant;
 import software.amazon.awssdk.protocols.core.StringToValueConverter;
-import software.amazon.awssdk.protocols.query.unmarshall.XmlDomParser;
 import software.amazon.awssdk.protocols.query.unmarshall.XmlElement;
 import software.amazon.awssdk.protocols.query.unmarshall.XmlErrorUnmarshaller;
 import software.amazon.awssdk.utils.CollectionUtils;
@@ -52,9 +52,7 @@ public final class XmlProtocolUnmarshaller implements XmlErrorUnmarshaller {
     public <TypeT extends SdkPojo> TypeT unmarshall(SdkPojo sdkPojo,
                                                     SdkHttpFullResponse response) {
 
-        XmlElement document = hasPayloadMembers(sdkPojo) && response.content().isPresent()
-                              ? XmlDomParser.parse(response.content().get()) : null;
-
+        XmlElement document = XmlResponseParserUtils.parse(sdkPojo, response);
         return unmarshall(sdkPojo, document, response);
     }
 
@@ -91,18 +89,16 @@ public final class XmlProtocolUnmarshaller implements XmlErrorUnmarshaller {
                 field.set(sdkPojo, unmarshalled);
             }
         }
+
+        if (!(sdkPojo instanceof Buildable)) {
+            throw new RuntimeException("The sdkPojo passed to the unmarshaller is not buildable (must implement "
+                                       + "Buildable)");
+        }
         return (SdkPojo) ((Buildable) sdkPojo).build();
     }
 
     private boolean isExplicitPayloadMember(SdkField<?> field) {
         return field.containsTrait(PayloadTrait.class);
-    }
-
-    private boolean hasPayloadMembers(SdkPojo sdkPojo) {
-        return sdkPojo.sdkFields().stream()
-                      .filter(f -> f.location() == MarshallLocation.PAYLOAD)
-                      .findAny()
-                      .isPresent();
     }
 
     private static Map<MarshallLocation, TimestampFormatTrait.Format> getDefaultTimestampFormats() {

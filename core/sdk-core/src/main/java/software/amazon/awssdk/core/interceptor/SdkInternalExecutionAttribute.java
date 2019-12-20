@@ -16,6 +16,7 @@
 package software.amazon.awssdk.core.interceptor;
 
 import java.util.concurrent.CompletableFuture;
+
 import software.amazon.awssdk.annotations.SdkProtectedApi;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 
@@ -34,10 +35,22 @@ public final class SdkInternalExecutionAttribute extends SdkExecutionAttribute {
 
     /**
      * The key to store the {@link CompletableFuture} returned by {@link AsyncResponseTransformer#prepare()} method
-     * in the first attempt of a request. This is used only for async streaming requests
+     * in the first attempt of a request. This used to be used only for async streaming requests.
+     *
+     * The purpose this attribute used to service has been replaced with
+     * {@link SdkInternalExecutionAttribute#EXECUTION_ATTEMPT} which now tracks the execution attempt number and is
+     * incremented with successive retries.
      */
+    @Deprecated
     public static final ExecutionAttribute<CompletableFuture<?>> ASYNC_RESPONSE_TRANSFORMER_FUTURE =
         new ExecutionAttribute<>("AsyncResponseTransformerFuture");
+
+    /**
+     * The key to store the execution attempt number that is used by handlers in the async request pipeline to help
+     * regulate their behavior.
+     */
+    public static final ExecutionAttribute<Integer> EXECUTION_ATTEMPT =
+        new ExecutionAttribute<>("SdkInternalExecutionAttempt");
 
     private SdkInternalExecutionAttribute() {
     }

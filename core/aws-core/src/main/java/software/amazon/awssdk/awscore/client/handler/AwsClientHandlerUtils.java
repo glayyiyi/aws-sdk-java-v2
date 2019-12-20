@@ -57,7 +57,8 @@ public final class AwsClientHandlerUtils {
 
     static <InputT extends SdkRequest, OutputT extends SdkResponse> ExecutionContext createExecutionContext(
         ClientExecutionParams<InputT, OutputT> executionParams,
-        SdkClientConfiguration clientConfig) {
+        SdkClientConfiguration clientConfig,
+        ExecutionAttributes executionAttributes) {
 
         SdkRequest originalRequest = executionParams.getInput();
         AwsCredentialsProvider clientCredentials = clientConfig.option(AwsClientOption.CREDENTIALS_PROVIDER);
@@ -71,7 +72,7 @@ public final class AwsClientHandlerUtils {
 
         Validate.validState(credentials != null, "Credential providers must never return null.");
 
-        ExecutionAttributes executionAttributes = new ExecutionAttributes()
+        executionAttributes
             .putAttribute(AwsSignerExecutionAttribute.SERVICE_CONFIG, clientConfig.option(SdkClientOption.SERVICE_CONFIGURATION))
             .putAttribute(AwsSignerExecutionAttribute.AWS_CREDENTIALS, credentials)
             .putAttribute(AwsSignerExecutionAttribute.SERVICE_SIGNING_NAME,
