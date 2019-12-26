@@ -15,22 +15,32 @@
 
 package software.amazon.awssdk.protocols.query.internal.marshall;
 
+import static software.amazon.awssdk.http.Header.CONTENT_LENGTH;
+import static software.amazon.awssdk.http.Header.CONTENT_TYPE;
+import static software.amazon.awssdk.utils.StringUtils.lowerCase;
+
+import java.io.ByteArrayInputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+
 import software.amazon.awssdk.annotations.SdkInternalApi;
 import software.amazon.awssdk.core.SdkField;
 import software.amazon.awssdk.core.SdkPojo;
 import software.amazon.awssdk.core.protocol.MarshallingType;
 import software.amazon.awssdk.http.SdkHttpFullRequest;
+import software.amazon.awssdk.http.SdkHttpMethod;
 import software.amazon.awssdk.protocols.core.OperationInfo;
 import software.amazon.awssdk.protocols.core.ProtocolMarshaller;
 import software.amazon.awssdk.protocols.core.ProtocolUtils;
+import software.amazon.awssdk.utils.CollectionUtils;
+import software.amazon.awssdk.utils.http.SdkHttpUtils;
+
 
 /**
  * Implementation of {@link ProtocolMarshaller} for AWS Query services.
  */
 @SdkInternalApi
-public final class QueryProtocolMarshaller
-    implements ProtocolMarshaller<SdkHttpFullRequest> {
+public final class QueryProtocolMarshaller implements ProtocolMarshaller<SdkHttpFullRequest> {
 
     private static final QueryMarshallerRegistry AWS_QUERY_MARSHALLER_REGISTRY = commonRegistry()
         .marshaller(MarshallingType.LIST, ListQueryMarshaller.awsQuery())
@@ -59,13 +69,23 @@ public final class QueryProtocolMarshaller
 
     @Override
     public SdkHttpFullRequest marshall(SdkPojo pojo) {
-        QueryMarshallerContext context = QueryMarshallerContext.builder()
-                                                               .request(request)
-                                                               .protocolHandler(this)
-                                                               .marshallerRegistry(registry)
-                                                               .build();
-        doMarshall(null, context, pojo);
+        initializeAndMarshall(pojo);
+        moveQueryParamsToBody();
         return request.build();
+    }
+
+    public SdkHttpFullRequest marshallQueryParams(SdkPojo pojo) {
+        initializeAndMarshall(pojo);
+        return request.build();
+    }
+
+    private void initializeAndMarshall(SdkPojo pojo) {
+        QueryMarshallerContext context = QueryMarshallerContext.builder()
+                .request(request)
+                .protocolHandler(this)
+                .marshallerRegistry(registry)
+                .build();
+        doMarshall(null, context, pojo);
     }
 
     private void doMarshall(String path, QueryMarshallerContext context, SdkPojo pojo) {
@@ -95,6 +115,26 @@ public final class QueryProtocolMarshaller
             .marshaller(MarshallingType.MAP, new MapQueryMarshaller())
             .marshaller(MarshallingType.SDK_POJO, (context, path, val, sdkField) ->
                 context.protocolHandler().doMarshall(path, context, val));
+    }
+
+    private void moveQueryParamsToBody() {
+
+        if (!(request.method() == SdkHttpMethod.POST &&
+                request.contentStreamProvider() == null &&
+                !CollectionUtils.isNullOrEmpty(request.rawQueryParameters())))
+            return;
+
+        byte[] params = SdkHttpUtils.encodeAndFlattenFormData(request.rawQueryParameters()).orElse("")
+                .getBytes(StandardCharsets.UTF_8);
+
+        request.clearQueryParameters();
+
+        request.contentStreamProvider(() -> new ByteArrayInputStream(params));
+        if (params.length > 0) {
+            request.putHeader(CONTENT_LENGTH, String.valueOf(params.length));
+            request.putHeader(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=" +
+                                                lowerCase(StandardCharsets.UTF_8.toString()));
+        }
     }
 
     /**

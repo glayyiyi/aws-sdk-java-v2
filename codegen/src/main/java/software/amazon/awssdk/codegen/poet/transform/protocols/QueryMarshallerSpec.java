@@ -116,7 +116,7 @@ public class QueryMarshallerSpec implements MarshallerProtocolSpec {
         CodeBlock codeBlock = initializationCodeBlockBuilder.add(".build()").build();
 
         FieldSpec.Builder instance = FieldSpec.builder(ClassName.get(OperationInfo.class), "SDK_OPERATION_BINDING")
-                                              .addModifiers(Modifier.PRIVATE, Modifier.FINAL, Modifier.STATIC)
+                                              .addModifiers(Modifier.PUBLIC, Modifier.FINAL, Modifier.STATIC)
                                               .initializer(codeBlock);
 
         fields.add(instance.build());

@@ -28,20 +28,21 @@ import java.time.Clock;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
+
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.signer.AwsSignerExecutionAttribute;
 import software.amazon.awssdk.awscore.endpoint.DefaultServiceEndpointBuilder;
 import software.amazon.awssdk.core.Protocol;
+import software.amazon.awssdk.core.SdkRequest;
 import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 import software.amazon.awssdk.core.interceptor.InterceptorContext;
 import software.amazon.awssdk.http.SdkHttpFullRequest;
 import software.amazon.awssdk.http.SdkHttpRequest;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.rds.internal.CopyDbSnapshotPresignInterceptor;
-import software.amazon.awssdk.services.rds.internal.RdsPresignInterceptor;
 import software.amazon.awssdk.services.rds.model.CopyDbSnapshotRequest;
 import software.amazon.awssdk.services.rds.model.RdsRequest;
 import software.amazon.awssdk.services.rds.transform.CopyDbSnapshotRequestMarshaller;
@@ -50,27 +51,27 @@ import software.amazon.awssdk.services.rds.transform.CopyDbSnapshotRequestMarsha
  * Unit Tests for {@link RdsPresignInterceptor}
  */
 public class PresignRequestHandlerTest {
-    private static final AwsBasicCredentials CREDENTIALS = AwsBasicCredentials.create("foo", "bar");
-    private static final Region DESTINATION_REGION = Region.of("us-west-2");
 
-    private static RdsPresignInterceptor<CopyDbSnapshotRequest> presignInterceptor = new CopyDbSnapshotPresignInterceptor();
-    private final CopyDbSnapshotRequestMarshaller marshaller =
-        new CopyDbSnapshotRequestMarshaller(RdsPresignInterceptor.PROTOCOL_FACTORY);
+    private final AwsBasicCredentials CREDENTIALS = AwsBasicCredentials.create("foo", "bar");
+    private final Region DESTINATION_REGION = Region.of("us-west-2");
+
+    private RdsPresignInterceptor<CopyDbSnapshotRequest> presignInterceptor;
+
+    @Before
+    public void setup() {
+        presignInterceptor = new CopyDbSnapshotPresignInterceptor();
+    }
 
     @Test
     public void testSetsPresignedUrl() {
         CopyDbSnapshotRequest request = makeTestRequest();
-        SdkHttpRequest presignedRequest = modifyHttpRequest(presignInterceptor, request, marshallRequest(request));
+        CopyDbSnapshotRequest presignedRequest = (CopyDbSnapshotRequest) modifySdkRequest(presignInterceptor, request);
 
-        assertNotNull(presignedRequest.rawQueryParameters().get("PreSignedUrl").get(0));
+        assertNotNull(presignedRequest.preSignedUrl());
     }
 
     @Test
     public void testComputesPresignedUrlCorrectly() {
-        // Note: test data was baselined by performing actual calls, with real
-        // credentials to RDS and checking that they succeeded. Then the
-        // request was recreated with all the same parameters but with test
-        // credentials.
         final CopyDbSnapshotRequest request = CopyDbSnapshotRequest.builder()
                 .sourceDBSnapshotIdentifier("arn:aws:rds:us-east-1:123456789012:snapshot:rds:test-instance-ss-2016-12-20-23-19")
                 .targetDBSnapshotIdentifier("test-instance-ss-copy-2")
@@ -80,8 +81,6 @@ public class PresignRequestHandlerTest {
 
         Calendar c = new GregorianCalendar();
         c.setTimeZone(TimeZone.getTimeZone("UTC"));
-        // 20161221T180735Z
-        // Note: month is 0-based
         c.set(2016, Calendar.DECEMBER, 21, 18, 7, 35);
 
         Clock signingDateOverride = Mockito.mock(Clock.class);
@@ -89,7 +88,7 @@ public class PresignRequestHandlerTest {
 
         RdsPresignInterceptor<CopyDbSnapshotRequest> interceptor = new CopyDbSnapshotPresignInterceptor(signingDateOverride);
 
-        SdkHttpRequest presignedRequest = modifyHttpRequest(interceptor, request, marshallRequest(request));
+        CopyDbSnapshotRequest presignedRequest = (CopyDbSnapshotRequest) modifySdkRequest(interceptor, request);
 
         final String expectedPreSignedUrl = "https://rds.us-east-1.amazonaws.com?" +
                 "Action=CopyDBSnapshot" +
@@ -105,7 +104,7 @@ public class PresignRequestHandlerTest {
                 "&X-Amz-Credential=foo%2F20161221%2Fus-east-1%2Frds%2Faws4_request" +
                 "&X-Amz-Signature=f839ca3c728dc96e7c978befeac648296b9f778f6724073de4217173859d13d9";
 
-        assertEquals(expectedPreSignedUrl, presignedRequest.rawQueryParameters().get("PreSignedUrl").get(0));
+        assertEquals(expectedPreSignedUrl, presignedRequest.preSignedUrl());
     }
 
     @Test
@@ -115,19 +114,18 @@ public class PresignRequestHandlerTest {
                 .preSignedUrl("PRESIGNED")
                 .build();
 
+        CopyDbSnapshotRequest presignedRequest = (CopyDbSnapshotRequest) modifySdkRequest(presignInterceptor, request);
 
-        SdkHttpRequest presignedRequest = modifyHttpRequest(presignInterceptor, request, marshallRequest(request));
-
-        assertEquals("PRESIGNED", presignedRequest.rawQueryParameters().get("PreSignedUrl").get(0));
+        assertEquals("PRESIGNED", presignedRequest.preSignedUrl());
     }
 
     @Test
     public void testSkipsPresigningIfSourceRegionNotSet() {
         CopyDbSnapshotRequest request = CopyDbSnapshotRequest.builder().build();
 
-        SdkHttpRequest presignedRequest = modifyHttpRequest(presignInterceptor, request, marshallRequest(request));
+        CopyDbSnapshotRequest presignedRequest = (CopyDbSnapshotRequest) modifySdkRequest(presignInterceptor, request);
 
-        assertNull(presignedRequest.rawQueryParameters().get("PreSignedUrl"));
+        assertNull(presignedRequest.preSignedUrl());
     }
 
     @Test
@@ -136,34 +134,25 @@ public class PresignRequestHandlerTest {
                 .sourceRegion("us-east-1")
                 .build();
         Region destination = Region.of("us-west-2");
-        SdkHttpFullRequest marshalled = marshallRequest(request);
 
-        final SdkHttpRequest presignedRequest = modifyHttpRequest(presignInterceptor, request, marshalled);
+        CopyDbSnapshotRequest presignedRequest = (CopyDbSnapshotRequest) modifySdkRequest(presignInterceptor, request);
 
-        final URI presignedUrl = new URI(presignedRequest.rawQueryParameters().get("PreSignedUrl").get(0));
+        final URI presignedUrl = new URI(presignedRequest.preSignedUrl());
         assertTrue(presignedUrl.toString().contains("DestinationRegion=" + destination.id()));
     }
 
     @Test
     public void testSourceRegionRemovedFromOriginalRequest() {
         CopyDbSnapshotRequest request = makeTestRequest();
-        SdkHttpFullRequest marshalled = marshallRequest(request);
-        SdkHttpRequest actual = modifyHttpRequest(presignInterceptor, request, marshalled);
+        CopyDbSnapshotRequest presignedRequest = (CopyDbSnapshotRequest) modifySdkRequest(presignInterceptor, request);
 
-        assertFalse(actual.rawQueryParameters().containsKey("SourceRegion"));
-    }
-
-    private SdkHttpFullRequest marshallRequest(CopyDbSnapshotRequest request) {
-        SdkHttpFullRequest.Builder marshalled = marshaller.marshall(request).toBuilder();
-
-        URI endpoint = new DefaultServiceEndpointBuilder("rds", Protocol.HTTPS.toString())
-                          .withRegion(DESTINATION_REGION)
-                          .getServiceEndpoint();
-        return marshalled.uri(endpoint).build();
+        assertNull(presignedRequest.sourceRegion());
     }
 
     private ExecutionAttributes executionAttributes() {
-        return new ExecutionAttributes().putAttribute(AwsSignerExecutionAttribute.AWS_CREDENTIALS, CREDENTIALS);
+        return new ExecutionAttributes()
+                .putAttribute(AwsSignerExecutionAttribute.AWS_CREDENTIALS, CREDENTIALS)
+                .putAttribute(AwsSignerExecutionAttribute.SIGNING_REGION, DESTINATION_REGION);
     }
 
     private CopyDbSnapshotRequest makeTestRequest() {
@@ -175,10 +164,8 @@ public class PresignRequestHandlerTest {
                 .build();
     }
 
-    private SdkHttpRequest modifyHttpRequest(ExecutionInterceptor interceptor,
-                                             RdsRequest request,
-                                             SdkHttpFullRequest httpRequest) {
-        InterceptorContext context = InterceptorContext.builder().request(request).httpRequest(httpRequest).build();
-        return interceptor.modifyHttpRequest(context, executionAttributes());
+    private SdkRequest modifySdkRequest(ExecutionInterceptor interceptor, RdsRequest request) {
+        InterceptorContext context = InterceptorContext.builder().request(request).build();
+        return interceptor.modifyRequest(context, executionAttributes());
     }
 }

@@ -18,6 +18,7 @@ package software.amazon.awssdk.services.rds.internal;
 import software.amazon.awssdk.annotations.SdkInternalApi;
 import software.amazon.awssdk.http.SdkHttpFullRequest;
 import software.amazon.awssdk.services.rds.model.CreateDbInstanceReadReplicaRequest;
+import software.amazon.awssdk.services.rds.model.RdsRequest;
 import software.amazon.awssdk.services.rds.transform.CreateDbInstanceReadReplicaRequestMarshaller;
 
 /**
@@ -27,9 +28,6 @@ import software.amazon.awssdk.services.rds.transform.CreateDbInstanceReadReplica
 public final class CreateDbInstanceReadReplicaPresignInterceptor extends
                                                                  RdsPresignInterceptor<CreateDbInstanceReadReplicaRequest> {
 
-    public static final CreateDbInstanceReadReplicaRequestMarshaller MARSHALLER =
-        new CreateDbInstanceReadReplicaRequestMarshaller(PROTOCOL_FACTORY);
-
     public CreateDbInstanceReadReplicaPresignInterceptor() {
         super(CreateDbInstanceReadReplicaRequest.class);
     }
@@ -37,15 +35,31 @@ public final class CreateDbInstanceReadReplicaPresignInterceptor extends
     @Override
     protected PresignableRequest adaptRequest(final CreateDbInstanceReadReplicaRequest originalRequest) {
         return new PresignableRequest() {
+
+            @Override
+            public String getPresignedUrl() {
+                return originalRequest.preSignedUrl();
+            }
+
             @Override
             public String getSourceRegion() {
                 return originalRequest.sourceRegion();
             }
 
             @Override
-            public SdkHttpFullRequest marshall() {
-                return MARSHALLER.marshall(originalRequest);
+            public SdkHttpFullRequest marshallQueryParams() {
+                return getMarshaller(CreateDbInstanceReadReplicaRequestMarshaller.SDK_OPERATION_BINDING)
+                        .marshallQueryParams(originalRequest);
             }
         };
+    }
+
+    @Override
+    protected RdsRequest modifyRequestForPresigning(final CreateDbInstanceReadReplicaRequest originalRequest,
+                                                    String presignedUrl) {
+        return originalRequest.toBuilder()
+                .preSignedUrl(presignedUrl)
+                .sourceRegion(null)
+                .build();
     }
 }

@@ -71,11 +71,22 @@ public class AwsQueryProtocolFactory {
      */
     public final ProtocolMarshaller<SdkHttpFullRequest> createProtocolMarshaller(
         OperationInfo operationInfo) {
+        return createQueryProtocolMarshaller(operationInfo);
+    }
+
+    /**
+     * Creates a new marshaller for the given request.
+     *
+     * @param operationInfo Object containing metadata about the operation.
+     * @return New {@link ProtocolMarshaller}.
+     */
+    public final QueryProtocolMarshaller createQueryProtocolMarshaller(
+            OperationInfo operationInfo) {
         return QueryProtocolMarshaller.builder()
-                                      .endpoint(clientConfiguration.option(SdkClientOption.ENDPOINT))
-                                      .operationInfo(operationInfo)
-                                      .isEc2(isEc2())
-                                      .build();
+                .endpoint(clientConfiguration.option(SdkClientOption.ENDPOINT))
+                .operationInfo(operationInfo)
+                .isEc2(isEc2())
+                .build();
     }
 
     /**

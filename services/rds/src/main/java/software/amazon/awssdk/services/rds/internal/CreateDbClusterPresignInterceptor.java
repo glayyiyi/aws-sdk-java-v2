@@ -15,32 +15,24 @@
 
 package software.amazon.awssdk.services.rds.internal;
 
-import java.time.Clock;
-
 import software.amazon.awssdk.annotations.SdkInternalApi;
-import software.amazon.awssdk.annotations.SdkTestInternalApi;
 import software.amazon.awssdk.http.SdkHttpFullRequest;
-import software.amazon.awssdk.services.rds.model.CopyDbSnapshotRequest;
+import software.amazon.awssdk.services.rds.model.CreateDbClusterRequest;
 import software.amazon.awssdk.services.rds.model.RdsRequest;
-import software.amazon.awssdk.services.rds.transform.CopyDbSnapshotRequestMarshaller;
+import software.amazon.awssdk.services.rds.transform.CreateDbClusterRequestMarshaller;
 
 /**
- * Handler for pre-signing {@link CopyDbSnapshotRequest}.
+ * Handler for pre-signing {@link CreateDbClusterRequest}.
  */
 @SdkInternalApi
-public final class CopyDbSnapshotPresignInterceptor extends RdsPresignInterceptor<CopyDbSnapshotRequest> {
+public final class CreateDbClusterPresignInterceptor extends RdsPresignInterceptor<CreateDbClusterRequest> {
 
-    public CopyDbSnapshotPresignInterceptor() {
-        super(CopyDbSnapshotRequest.class);
-    }
-
-    @SdkTestInternalApi
-    CopyDbSnapshotPresignInterceptor(Clock signingDateOverride) {
-        super(CopyDbSnapshotRequest.class, signingDateOverride);
+    public CreateDbClusterPresignInterceptor() {
+        super(CreateDbClusterRequest.class);
     }
 
     @Override
-    protected PresignableRequest adaptRequest(final CopyDbSnapshotRequest originalRequest) {
+    protected PresignableRequest adaptRequest(final CreateDbClusterRequest originalRequest) {
         return new PresignableRequest() {
 
             @Override
@@ -55,14 +47,14 @@ public final class CopyDbSnapshotPresignInterceptor extends RdsPresignIntercepto
 
             @Override
             public SdkHttpFullRequest marshallQueryParams() {
-                return getMarshaller(CopyDbSnapshotRequestMarshaller.SDK_OPERATION_BINDING)
+                return getMarshaller(CreateDbClusterRequestMarshaller.SDK_OPERATION_BINDING)
                         .marshallQueryParams(originalRequest);
             }
         };
     }
 
     @Override
-    protected RdsRequest modifyRequestForPresigning(final CopyDbSnapshotRequest originalRequest, String presignedUrl) {
+    protected RdsRequest modifyRequestForPresigning(final CreateDbClusterRequest originalRequest, String presignedUrl) {
         return originalRequest.toBuilder()
                 .preSignedUrl(presignedUrl)
                 .sourceRegion(null)
